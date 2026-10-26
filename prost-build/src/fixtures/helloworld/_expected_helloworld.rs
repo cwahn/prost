@@ -22,18 +22,18 @@ pub enum ServingStatus {
     NotServing = 2,
 }
 impl ServingStatus {
-    /// String value of the enum field names used in the ProtoBuf definition.
+    /// String value of the enum field names used in the Protobuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
+    /// (if the Protobuf definition does not change) and safe for programmatic use.
+    pub const fn as_str_name(&self) -> &'static str {
         match self {
             Self::Unknown => "UNKNOWN",
             Self::Serving => "SERVING",
             Self::NotServing => "NOT_SERVING",
         }
     }
-    /// Creates an enum from field names used in the ProtoBuf definition.
+    /// Creates an enum from field names used in the Protobuf definition.
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
             "UNKNOWN" => Some(Self::Unknown),

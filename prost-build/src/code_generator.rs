@@ -811,7 +811,7 @@ impl<'b> CodeGenerator<'_, 'b> {
 
         self.push_indent();
         self.buf.push_str(
-            "/// String value of the enum field names used in the ProtoBuf definition.\n",
+            "/// String value of the enum field names used in the Protobuf definition.\n",
         );
         self.push_indent();
         self.buf.push_str("///\n");
@@ -821,11 +821,11 @@ impl<'b> CodeGenerator<'_, 'b> {
         );
         self.push_indent();
         self.buf.push_str(
-            "/// (if the ProtoBuf definition does not change) and safe for programmatic use.\n",
+            "/// (if the Protobuf definition does not change) and safe for programmatic use.\n",
         );
         self.push_indent();
         self.buf
-            .push_str("pub fn as_str_name(&self) -> &'static str {\n");
+            .push_str("pub const fn as_str_name(&self) -> &'static str {\n");
         self.depth += 1;
 
         self.push_indent();
@@ -855,7 +855,7 @@ impl<'b> CodeGenerator<'_, 'b> {
 
         self.push_indent();
         self.buf
-            .push_str("/// Creates an enum from field names used in the ProtoBuf definition.\n");
+            .push_str("/// Creates an enum from field names used in the Protobuf definition.\n");
 
         self.push_indent();
         self.buf

@@ -378,6 +378,142 @@ mod tests {
         }
     }
 
+    fn generated_descriptor_docs(comments: &str) -> String {
+        use prost_types::{DescriptorProto, FileDescriptorProto, SourceCodeInfo};
+
+        let file = FileDescriptorProto {
+            name: Some("comments.proto".into()),
+            package: Some("comments".into()),
+            syntax: Some("proto3".into()),
+            message_type: vec![DescriptorProto {
+                name: Some("Example".into()),
+                ..Default::default()
+            }],
+            source_code_info: Some(SourceCodeInfo {
+                location: vec![prost_types::source_code_info::Location {
+                    path: vec![4, 0],
+                    span: vec![0, 0, 1],
+                    leading_comments: Some(comments.into()),
+                    ..Default::default()
+                }],
+            }),
+            ..Default::default()
+        };
+        let module = Module::from_protobuf_package_name("comments");
+        let generated = Config::new()
+            .generate(vec![(module.clone(), file)])
+            .unwrap();
+        generated[&module]
+            .lines()
+            .filter_map(|line| line.strip_prefix("///"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn descriptor_comments_preserve_list_contained_fences() {
+        use pulldown_cmark::{Event, Parser, Tag, TagEnd};
+
+        let docs = generated_descriptor_docs(
+            " - ```text\n   (-- api-linter: core::0123::rule=disabled --)\n   ```\n\n After prose.\n",
+        );
+        let mut code_blocks = 0;
+        let mut list_items = 0;
+        let mut in_code = false;
+        let mut after_prose = false;
+        for event in Parser::new(&docs) {
+            match event {
+                Event::Start(Tag::CodeBlock(_)) => {
+                    code_blocks += 1;
+                    in_code = true;
+                }
+                Event::End(TagEnd::CodeBlock) => in_code = false,
+                Event::Start(Tag::Item) => list_items += 1,
+                Event::Text(text) if text.contains("After prose.") => {
+                    assert!(!in_code, "{docs}");
+                    after_prose = true;
+                }
+                _ => {}
+            }
+        }
+        assert_eq!(code_blocks, 1, "{docs}");
+        assert_eq!(list_items, 1, "{docs}");
+        assert!(after_prose, "{docs}");
+    }
+
+    #[test]
+    fn descriptor_comments_preserve_opaque_metadata_with_fence_payload() {
+        use pulldown_cmark::{Event, Parser, Tag, TagEnd};
+
+        let metadata = " (-- api-linter: core::0123::rule=disabled\n ```\n Reason [values] https://example.com\n --)";
+        let docs = generated_descriptor_docs(&format!("{metadata}\n After prose.\n"));
+        assert!(docs.contains(" ````text\n"), "{docs}");
+        let mut code_blocks = 0;
+        let mut in_code = false;
+        let mut payload = String::new();
+        let mut after_prose = false;
+        for event in Parser::new(&docs) {
+            match event {
+                Event::Start(Tag::CodeBlock(_)) => {
+                    code_blocks += 1;
+                    in_code = true;
+                }
+                Event::End(TagEnd::CodeBlock) => in_code = false,
+                Event::Text(text) if in_code => payload.push_str(&text),
+                Event::Text(text) if text.contains("After prose.") => after_prose = true,
+                _ => {}
+            }
+        }
+        assert_eq!(code_blocks, 1, "{docs}");
+        assert_eq!(payload, format!("{metadata}\n"), "{docs}");
+        assert!(after_prose, "{docs}");
+    }
+
+    #[test]
+    fn enum_name_generation_preserves_proto_names_and_numbers() {
+        use prost_types::{EnumDescriptorProto, EnumValueDescriptorProto, FileDescriptorProto};
+
+        let file = FileDescriptorProto {
+            name: Some("names.proto".into()),
+            package: Some("names".into()),
+            syntax: Some("proto2".into()),
+            enum_type: vec![EnumDescriptorProto {
+                name: Some("Status".into()),
+                value: [
+                    ("STATUS_UNKNOWN", 0),
+                    ("STATUS_READY", 7),
+                    ("STATUS_NEGATIVE", -3),
+                ]
+                .into_iter()
+                .map(|(name, number)| EnumValueDescriptorProto {
+                    name: Some(name.into()),
+                    number: Some(number),
+                    ..Default::default()
+                })
+                .collect(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let modules = Config::new()
+            .generate(vec![(Module::from_protobuf_package_name("names"), file)])
+            .unwrap();
+        let source = &modules[&Module::from_protobuf_package_name("names")];
+        assert!(source.contains("pub const fn as_str_name(&self) -> &'static str"));
+        assert!(source.contains("pub fn from_str_name(value: &str)"));
+        assert!(!source.contains("ProtoBuf"));
+        for (variant, name, number) in [
+            ("Unknown", "STATUS_UNKNOWN", 0),
+            ("Ready", "STATUS_READY", 7),
+            ("Negative", "STATUS_NEGATIVE", -3),
+        ] {
+            assert!(source.contains(&format!("{variant} = {number},")));
+            assert!(source.contains(&format!("Self::{variant} => \"{name}\",")));
+            assert!(source.contains(&format!("\"{name}\" => Some(Self::{variant}),")));
+        }
+        assert!(source.contains("_ => None,"));
+    }
+
     #[test]
     fn smoke_test() {
         let _ = env_logger::try_init();
